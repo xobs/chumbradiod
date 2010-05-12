@@ -19,6 +19,7 @@
 */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <csignal>
 #include <iostream>
 #include <chumby_httpd/chumby_http_server.h>
