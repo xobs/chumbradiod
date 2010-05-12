@@ -337,13 +337,14 @@ void QN_ChipInitialization()
 {
 	QND_Delay(200);
 	QND_WriteReg(0x01,0x89); //reset
-    // Set the crystal to 24 MHz.
     QND_WriteReg(ANACTL1, 0x29);
+    // Set the crystal to 24 MHz.
     if(chumby_XCLK) {
         QND_WriteReg(XLT3, 0x10);
         QND_WriteReg(REG_VGA, 0x3f);
     }
     else {
+        QND_WriteReg(XLT3, 0x00);
         QND_WriteReg(REG_VGA, 0x00);
     }
 	QND_WriteReg(0x50,0x00);
@@ -351,7 +352,6 @@ void QN_ChipInitialization()
 	QND_WriteReg(0x01,0x09);
 	QND_Delay(400);           //wait more than 400ms
 	QND_WriteReg(0x3C,0x89); //for RDS SYNC
-	QND_WriteReg(0x49,0x00);
 	QND_WriteReg(0x4a,0xba);
 	QND_WriteReg(0x5c,0x05);  
 	QND_WriteReg(0x52,0x0c);  //mute
@@ -529,6 +529,11 @@ void QND_SetCountry(UINT8 country)
 	qnd_Country = country;
 	switch(country)
 	{
+	case COUNTRY_EUROPE:
+		QND_CH_START = 8700;
+		QND_CH_STOP = 10800;
+		QND_CH_STEP = 1;
+		break;
 	case COUNTRY_CHINA:
 		QND_CH_START = 7600;
 		QND_CH_STOP = 10800;

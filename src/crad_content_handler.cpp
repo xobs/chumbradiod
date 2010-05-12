@@ -200,6 +200,8 @@ chumby::HTTPResponse * ChumbRadioContentHandler::handleRequest(const chumby::HTT
                         country = COUNTRY_JAPAN;
                     if(!strcasecmp(cur_value.c_str(), "china"))
                         country = COUNTRY_CHINA;
+                    if(!strcasecmp(cur_value.c_str(), "europe"))
+                        country = COUNTRY_EUROPE;
                 }
                 else if(cur_param == "seek_up")
                 {

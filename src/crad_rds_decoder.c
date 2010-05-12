@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "crad_interface.h"
+#include "qndriver.h"
 
 static char *group_codes[16][2] = {
     {
@@ -108,6 +109,42 @@ static char *pty_codes[] = {
 };
 
 
+static char *pty_codes_europe[] = {
+	"None",
+	"News",
+	"Current Affairs",
+	"Information",
+	"Sport",
+	"Education",
+	"Drama",
+	"Culture",
+	"Science",
+	"Varied",
+	"Pop Music",
+	"Rock Music",
+	"Easy Listening Music",
+	"Light classical",
+	"Serious classical",
+	"Other Music",
+	"Weather",
+	"Finance",
+	"Children’s programs",
+	"Social Affairs",
+	"Religion",
+	"Phone In",
+	"Travel & Touring",
+	"Leisure & Hobby",
+	"Jazz Music",
+	"Country Music",
+	"National Music",
+	"Oldies Music",
+	"Folk Music",
+	"Documentary",
+	"Alarm Test",
+	"Alarm - Alarm !",
+};
+
+
 
 
 
@@ -153,7 +190,10 @@ void do_type0(struct rds_data *rds_data, unsigned int *group, int is_version_A) 
     unsigned char segment_address = group[1] & 0x03;
     rds_data->traffic_program     = (group[1]>>10) & 0x01;
     rds_data->program_type        = (group[1]>>5) & 0x0F;
-    rds_data->program_type_code   = pty_codes[rds_data->program_type];
+	if(qnd_Country == COUNTRY_EUROPE)
+		rds_data->program_type_code   = pty_codes_europe[rds_data->program_type];
+	else
+		rds_data->program_type_code   = pty_codes[rds_data->program_type];
     rds_data->traffic_announcement= (group[1]>>4) & 0x01;
     rds_data->music_speech        = (group[1]>>3) & 0x01;
     rds_data->program_service_name[segment_address*2]=transform_char((group[3]>>8)&0xff);

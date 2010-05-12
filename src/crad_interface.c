@@ -49,6 +49,9 @@
 #include "crad_interface.h"
 //#include "crad_internal.h"
 
+// 50 ms input- and output- buffer length
+#define BUFFER_TIME 50000
+
 /*! probe for a radio, return file number if found, otherwise -1 */
 static int find_radio(char *path);
 static int get_radio_register(crad_t *p_crad, int register_index);
@@ -233,11 +236,12 @@ static int select_input(int input) {
 
 
 
-static snd_pcm_t *alsa_open(snd_pcm_t **pcm_handle, int stream_type) {
+static snd_pcm_t *alsa_open(snd_pcm_t **pcm_handle, int stream_type,
+        snd_pcm_uframes_t *buffer_size) {
     char                *pcm_name = "chumix";
     snd_pcm_hw_params_t *hwparams;
     snd_pcm_sw_params_t *swparams;
-    unsigned int         buffer_time, period_time;
+    unsigned int         buffer_time;
     int                  status;
     snd_pcm_uframes_t    xfer_align;
 
@@ -307,49 +311,12 @@ static snd_pcm_t *alsa_open(snd_pcm_t **pcm_handle, int stream_type) {
         goto error;
     }
 
-
-    // Set buffer size.
-    fprintf(stderr, "Getting buffer time\n");
-    status = snd_pcm_hw_params_get_buffer_time_max(hwparams, &buffer_time, 0);
-    if(status<0) {
-        fprintf(stderr, "Unable to get max buffer time: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-    fprintf(stderr, "Max buffer time: %d\n", buffer_time);
-
-    // Clamp buffer time to 5 seconds.
-    if(buffer_time > 500000)
-        buffer_time = 500000;
-
-
-    // Magic!  Came from aplay.c.
-    period_time = buffer_time / 4;
-
-    fprintf(stderr, "Setting period time\n");
-    status = snd_pcm_hw_params_set_period_time_near(*pcm_handle, hwparams,
-                                    &period_time, 0);
-    if(status<0) {
-        fprintf(stderr, "Unable to set period time: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-    fprintf(stderr, "Set period time to %d\n", period_time);
-
-
-
-
-    // Set the buffer time to something.
-    fprintf(stderr, "Setting buffer time\n");
+    // Set buffer time to a reasonable value.
+    // Probably won't work for playback, as it's fixed in /etc/asound.conf
+    buffer_time = BUFFER_TIME;
     status = snd_pcm_hw_params_set_buffer_time_near(*pcm_handle, hwparams,
                                                          &buffer_time, 0);
-    if(status<0) {
-        fprintf(stderr, "Unable to set buffer time: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-    fprintf(stderr, "Set buffer time to %d\n", buffer_time);
-
+    snd_pcm_hw_params_get_buffer_size(hwparams, buffer_size);
 
 
     // Write the settings out to the audio card.
@@ -371,99 +338,6 @@ static snd_pcm_t *alsa_open(snd_pcm_t **pcm_handle, int stream_type) {
     }
 
     return *pcm_handle;
-/*
-
-    snd_pcm_hw_params_get_period_size(hwparams, chunk_size, 0);
-    snd_pcm_hw_params_get_buffer_size(hwparams, buffer_size);
-    fprintf(stderr, "Chunk size: %d  Buffer size: %d\n", *chunk_size, *buffer_size);
-
-
-
-    // Now that we have the hardware parameters set, setup the software ones.
-    fprintf(stderr, "Allocating sw params\n");
-    snd_pcm_sw_params_alloca(&swparams);
-    status = snd_pcm_sw_params_current(*pcm_handle, swparams);
-    if(status<0) {
-        fprintf(stderr, "Unable to get software parameters: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-
-
-    status = snd_pcm_sw_params_get_xfer_align(swparams, &xfer_align);
-    if (status<0) {
-        fprintf(stderr, "Unable to obtain xfer align: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-
-    status = snd_pcm_sw_params_set_sleep_min(*pcm_handle, swparams, 0);
-    if(status<0) {
-        fprintf(stderr, "Unable to set sleep min: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-
-
-
-
-
-    size_t n = (*buffer_size / xfer_align) * xfer_align;
-
-
-
-    fprintf(stderr, "Setting avail min\n");
-    status = snd_pcm_sw_params_set_avail_min(*pcm_handle, swparams, *chunk_size);
-    if(status<0) {
-        fprintf(stderr, "Unable to set start threshold: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-
-
-    snd_pcm_uframes_t start_threshold = (double) rate * 30 / 1000000;
-    if (start_threshold < 1)
-        start_threshold = 1;
-    if (start_threshold > n)
-        start_threshold = n;
-    fprintf(stderr, "Setting start threshold to %d\n", start_threshold);
-    status = snd_pcm_sw_params_set_start_threshold(*pcm_handle, swparams, start_threshold);
-    if(status<0) {
-        fprintf(stderr, "Unable to set start threshold: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-
-
-    snd_pcm_uframes_t stop_threshold = *buffer_size + (double) rate * 0 / 1000000;
-    status = snd_pcm_sw_params_set_stop_threshold(*pcm_handle, swparams, stop_threshold);
-    assert(status >= 0);
-
-
-    status = snd_pcm_sw_params_set_xfer_align(*pcm_handle, swparams, xfer_align);
-    assert(status >= 0);
-
-
-
-    // Write the software parameters out.
-    fprintf(stderr, "Setting sw params\n");
-    status = snd_pcm_sw_params(*pcm_handle, swparams);
-    if(status<0) {
-        fprintf(stderr, "Unable to write software parameters: %s\n",
-                snd_strerror(status));
-        goto error;
-    }
-
-    fprintf(stderr, "Setting blocking mode\n");
-    snd_pcm_nonblock(*pcm_handle, 0);
-
-    int bits_per_sample = snd_pcm_format_physical_width(SND_PCM_FORMAT_S16_LE);
-    int bits_per_frame  = bits_per_sample * 2;
-    *chunk_size         = *chunk_size * bits_per_frame / 8;
-fprintf(stderr, "Bits per frame: %d\n", bits_per_frame);
-
-    return *pcm_handle;
-*/
 
 error:
     if(*pcm_handle) {
@@ -507,6 +381,7 @@ int alsa_recover(snd_pcm_t *stream) {
             error("xrun: prepare error: %s", snd_strerror(res));
             return -1;
         }
+        snd_pcm_start(stream);
         return 0;     /* ok, data should be accepted again */
     }
     
@@ -545,53 +420,70 @@ static int fill_rec_buffer(snd_pcm_t *rec, snd_pcm_uframes_t *data, int c) {
 
 static void *playback_thread(void *cr) {
     struct _crad_t *p_crad = (struct _crad_t *)cr;
+    snd_pcm_uframes_t playback_size, recording_size;
 
     snd_pcm_t *playback, *recording;
 
-    alsa_open(&recording, SND_PCM_STREAM_CAPTURE);
-    alsa_open(&playback,  SND_PCM_STREAM_PLAYBACK);
+    alsa_open(&recording, SND_PCM_STREAM_CAPTURE, &recording_size);
+    alsa_open(&playback,  SND_PCM_STREAM_PLAYBACK, &playback_size);
+    snd_pcm_start(recording);
 
 
+    snd_pcm_uframes_t recording_data[recording_size];
 
-    {
-        // 32 bits per frame (stereo, 16 bit audio).
-        snd_pcm_uframes_t data[4096];
-        while(p_crad->playback_thread_running) {
-            int bytes_read = fill_rec_buffer(recording,
-                                             data,
-                                             sizeof(data)/sizeof(data[0]));
+    while(p_crad->playback_thread_running) {
+        // Figure out how many frames to read.  Take the minimum
+        // available frames between playback and recording.
+        int recording_avail = snd_pcm_avail_update(recording);
+        int playback_avail  = snd_pcm_avail_update(playback);
+        int frames_to_read;
+        
+        if(recording_avail < playback_avail)
+            frames_to_read = recording_avail;
+        else
+            frames_to_read = playback_avail;
 
-            // If we didn't get enough data, wait, then try again.
-            if(bytes_read == -EAGAIN) {
-                fprintf(stderr, "Read error, trying again: %s\n",
-                        snd_strerror(bytes_read));
-                continue;
-            }
+        // If we have less than 10ms of data, pause for 5ms and try again.
+        if(frames_to_read < 441) {
+            usleep(5000);
+            continue;
+        }
 
-            else if(bytes_read == -EPIPE) {
-                fprintf(stderr, "Read error: (Over/Under)run\n");
-                if(alsa_recover(recording)) {
-                    p_crad->playback_thread_running = 0;
-                    break;
-                }
-                continue;
-            }
+        int frames_read = snd_pcm_readi(recording,
+                                        recording_data,
+                                        frames_to_read);
 
-            // Or if we had a different error, bail.
-            else if(bytes_read < 0) {
-                fprintf(stderr, "Read error: %s\n", snd_strerror(bytes_read));
+        // If we didn't get enough data, wait, then try again.
+        if(frames_read == -EAGAIN) {
+            fprintf(stderr, "Read error, trying again: %s\n",
+                    snd_strerror(frames_read));
+            continue;
+        }
+
+        else if(frames_read == -EPIPE) {
+            fprintf(stderr, "Read error: Overrun\n");
+            if(alsa_recover(recording)) {
                 p_crad->playback_thread_running = 0;
                 break;
             }
+            continue;
+        }
+
+        // Or if we had a different error, bail.
+        else if(frames_read < 0) {
+            fprintf(stderr, "Read error: %s\n", snd_strerror(frames_read));
+            p_crad->playback_thread_running = 0;
+            break;
+        }
 
 
 
+        while(frames_read > 0) {
+            int frames_written;
+            frames_written = snd_pcm_writei(playback, recording_data, frames_read);
 
-            int bytes_written;
-            bytes_written = snd_pcm_writei(playback, data, bytes_read);
-
-            if(bytes_written == -EPIPE) {
-                fprintf(stderr, "Write error: (Over/Under)run\n");
+            if(frames_written == -EPIPE) {
+                fprintf(stderr, "Write error: Underrun\n");
                 if(alsa_recover(playback)) {
                     p_crad->playback_thread_running = 0;
                     break;
@@ -599,11 +491,14 @@ static void *playback_thread(void *cr) {
                 continue;
             }
 
-            else if(bytes_written <= 0) {
+            else if(frames_written <= 0) {
                 fprintf(stderr, "Write error (%d): %s\n",
-                        bytes_written, snd_strerror(bytes_written));
+                        frames_written, snd_strerror(frames_written));
                 p_crad->playback_thread_running = 0;
                 break;
+            }
+            else {
+                frames_read -= frames_written;
             }
         }
     }
@@ -811,9 +706,9 @@ int crad_get_status_xml(struct _crad_t *p_crad, char *xml_str, int max_size) {
     snprintf(xml_str, max_size, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         "<radio found='1' tuned='%c' station='%d.%d' stereo='%c' "
         "signal='%d' signal_max='256' "
-//            "volume='%d' volume_max='15' "
         "seek_threshold='%d' seek_threshold_max='255' "
         "spacing='%d' "
+        "start='%d.%02d' stop='%d.%02d' "
         "band='%s' "
         "%s"
         ">\n"
@@ -834,18 +729,20 @@ int crad_get_status_xml(struct _crad_t *p_crad, char *xml_str, int max_size) {
         // Signal strength (in mysterious moon-units?)
         (strength),
 
-//            // Current volume
-//            (15),
-
         // Seek threshold (?)
         (0),
 
         // Channel spacing
         steparray[QND_CH_STEP]*10,
 
+        // Start and stop frequencies
+        QND_CH_START/100, QND_CH_START%100,
+        QND_CH_STOP/100,  QND_CH_STOP%100,
+
         // Current band setting
         (qnd_Country==COUNTRY_CHINA?"China":
-         (qnd_Country==COUNTRY_USA?"US/Europe":"Japan")),
+         (qnd_Country==COUNTRY_USA?"US":
+           (qnd_Country==COUNTRY_JAPAN?"Japan":"Europe"))),
 
         // If we're monitoring RDS data, copy that over.
         rds_string,

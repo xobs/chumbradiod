@@ -191,6 +191,7 @@ typedef double         FP64;
 #define COUNTRY_CHINA			0
 #define COUNTRY_USA				1
 #define COUNTRY_JAPAN			2
+#define COUNTRY_EUROPE			3
 /************************EDN******************************/
 
 /********************* minor feature selection*********************/
