@@ -21,6 +21,7 @@
 */
 
 #include <strings.h>
+#include <stdio.h>
 #include "crad_content_handler.h"
 #include "crad_interface.h"
 #include "qndriver.h"
