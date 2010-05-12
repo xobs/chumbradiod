@@ -1,0 +1,6 @@
+#
+# get rid of various editor temp files
+#
+all:
+	rm -f *~
+	rm -f src/*~
