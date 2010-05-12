@@ -1,2 +1,0 @@
-This daemon presents an http server on port 8086 that a Flash client can
-connect to and use to control the FM radio.
